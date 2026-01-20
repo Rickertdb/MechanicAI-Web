@@ -1,50 +1,45 @@
 import streamlit as st
 import google.generativeai as genai
 from PIL import Image
-import json
 
-# --- INITIAL SETUP ---
-genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-model = genai.GenerativeModel('gemini-1.5-flash')
+# 1. Setup API Key securely
+try:
+    # Use st.secrets to keep your key private
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+except Exception as e:
+    st.error("API Key not found in Streamlit Secrets!")
+    st.stop()
 
-st.set_page_config(page_title="AI Mechanic Agent", layout="wide")
+# 2. Set the model (using -latest to avoid 404 errors)
+model = genai.GenerativeModel('gemini-1.5-flash-latest')
 
-# Initialize Chat History
+st.title("👨‍🔧 AI Mechanic Online")
+
+# Sidebar for inputs
+car_model = st.sidebar.text_input("Car Model", "2018 Toyota Camry")
+uploaded_file = st.sidebar.file_uploader("Upload Image", type=['jpg', 'png', 'jpeg'])
+
+# Chat interface
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# --- UI LAYOUT ---
-st.title("👨‍🔧 AI Master Mechanic Chat")
-st.sidebar.header("Vehicle Profile")
-car_info = st.sidebar.text_input("Current Vehicle", placeholder="e.g. 2017 Honda Civic")
+for msg in st.session_state.messages:
+    st.chat_message(msg["role"]).write(msg["content"])
 
-# File Uploader in Sidebar
-uploaded_file = st.sidebar.file_uploader("Upload Engine/Chassis Photo", type=['jpg', 'png'])
-
-# Display Chat History
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
-
-# --- CHAT INPUT LOGIC ---
-if prompt := st.chat_input("Ask about a code (e.g. P0301) or describe a symptom..."):
-    # 1. Display user message
+if prompt := st.chat_input():
     st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.markdown(prompt)
+    st.chat_message("user").write(prompt)
 
-    # 2. Generate AI Response
     with st.chat_message("assistant"):
         with st.spinner("Analyzing..."):
-            # Prepare content (Text + Image if available)
-            content = [f"Context: {car_info}. Question: {prompt}"]
+            # Combine text and image for the AI
+            content = [f"Vehicle: {car_model}. Problem: {prompt}"]
             if uploaded_file:
-                img = Image.open(uploaded_file)
-                content.append(img)
+                content.append(Image.open(uploaded_file))
             
-            # Send to Gemini
-            response = model.generate_content(content)
-            full_response = response.text
-            
-            st.markdown(full_response)
-            st.session_state.messages.append({"role": "assistant", "content": full_response})
+            try:
+                response = model.generate_content(content)
+                st.write(response.text)
+                st.session_state.messages.append({"role": "assistant", "content": response.text})
+            except Exception as e:
+                st.error(f"AI Error: {e}")
